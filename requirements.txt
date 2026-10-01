@@ -1,0 +1,4 @@
+ouster-sdk==1.0.1
+numpy
+pyyaml
+psutil

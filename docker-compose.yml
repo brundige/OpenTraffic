@@ -1,0 +1,78 @@
+# Production stack for the Jetson.
+#
+# Two services from one image:
+#
+#   detector    always on. Sensor, background, zones, calls to the
+#               controller, and the health endpoint on :8090. Its own API
+#               (:8081) is loopback-only.
+#   inspector   the web page and login, on demand. It is in the "gui"
+#               profile, so "docker compose up -d" does not start it;
+#               systemd does, when someone connects to :8080, and stops
+#               it again once they have gone (deploy/systemd/).
+#
+# network_mode: host is required -- the sensor streams UDP straight at
+# the host's interface, so the container must share it. That works on
+# Linux only. On macOS Docker Desktop it silently gives the container
+# the Linux VM's network instead, the packets stay on the Mac, and the
+# detector times out waiting for frames. For dev on the Mac, skip
+# Docker and run: python main.py --profile dev
+#
+# Host networking also means the inspector reaches the detector API on
+# 127.0.0.1:8081, and no port mapping is needed or possible here.
+
+services:
+  detector:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        VERSION: ${OPENTRAFFIC_VERSION:-unknown}
+
+    image: opentraffic-detector
+    container_name: traffic-detector
+
+    platform: linux/arm64
+
+    network_mode: host
+
+    restart: unless-stopped
+
+    stdin_open: true
+    tty: true
+
+    volumes:
+      - ./data:/app/data
+
+    environment:
+      PYTHONUNBUFFERED: "1"
+      OPENTRAFFIC_PROFILE: "prod"
+      # Override the profile without rebuilding, e.g.:
+      # OPENTRAFFIC_SOURCE: "169.254.151.172"
+
+    command:
+      - python
+      - main.py
+
+  inspector:
+    image: opentraffic-detector
+    container_name: traffic-inspector
+
+    platform: linux/arm64
+
+    network_mode: host
+
+    # Started and stopped by systemd, never restarted by Docker.
+    restart: "no"
+    profiles: ["gui"]
+
+    volumes:
+      - ./data:/app/data
+
+    environment:
+      PYTHONUNBUFFERED: "1"
+      OPENTRAFFIC_PROFILE: "prod"
+
+    command:
+      - python
+      - -m
+      - inspector

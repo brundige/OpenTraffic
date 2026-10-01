@@ -1,0 +1,130 @@
+# OpenTraffic runtime profiles.
+#
+# Pick one with --profile, or the OPENTRAFFIC_PROFILE environment
+# variable. Anything here can be overridden per run by an
+# OPENTRAFFIC_<FIELD> environment variable, and --source overrides
+# the source on the command line.
+
+default_profile: dev
+
+profiles:
+
+  # Development: MacBook wired directly to the sensor.
+  #
+  # Run this natively -- do NOT run it under Docker Desktop on macOS.
+  # A macOS container gets the Linux VM's network, not the Mac's
+  # interfaces, so the sensor's UDP stream never reaches it.
+  #
+  # "source" also accepts a path to a recording (.pcap / .osf / .bag)
+  # for working away from the hardware.
+  dev:
+    source: 169.254.151.172
+    lidar_port: 7502
+    imu_port: 7503
+    frame_timeout: 5.0
+    stats_interval: 1.0
+    data_dir: data
+    zones_file: data/zones.yaml
+    clip_dir: data/clips
+
+    # Keep the last 30 s of frames in memory, ready to write out.
+    retain_seconds: 30
+    retain_max_mb: 256
+
+    # Everything loopback on the laptop. The inspector runs inside the
+    # detector here, so one "python main.py" is the whole thing.
+    api_host: 127.0.0.1
+    api_port: 8081
+    cloud_max_points: 60000
+    health_host: 127.0.0.1
+    health_port: 8090
+    inspector_embedded: true
+    inspector_host: 127.0.0.1
+    inspector_port: 8080
+    session_hours: 8
+    auth_file: data/auth.json
+
+    # Where detector calls go: "simulator" on the bench, "luxcom"
+    # for an M60 through a Luxcom EM-HDLC onto the SDLC bus.
+    #
+    # For luxcom, set controller_host to the EM-HDLC. The ports are
+    # Luxcom's sample defaults and must match its web interface:
+    # commands to controller_port, replies back to
+    # controller_listen_port on this machine (the "command IP/port"),
+    # and forwarded SDLC traffic -- SPaT -- to controller_forward_port
+    # (the "forward IP/port").
+    #
+    # The bench EM-HDLC is at 192.168.1.124 and forwards to
+    # 192.168.1.139, so this Mac needs that address on the wired port:
+    #   sudo ifconfig en0 alias 192.168.1.139 255.255.255.0
+    controller: luxcom
+    controller_host: 192.168.1.124
+    controller_port: 10001
+    controller_listen_port: 10001
+    controller_forward_port: 10002
+    controller_timeout: 5
+
+    # Returns inside a channel's zone needed to place its call, and
+    # how long (s) the zone must stay occupied before the call goes out.
+    detector_min_points: 20
+    detector_call_delay: 3.0
+
+    # The learned static scene: only points outside it count as
+    # movement, for calls and the "moving only" view. Learned at startup
+    # if the file is missing, or from the inspector's Learn background.
+    background_file: data/background.npz
+    background_voxel: 0.2
+    background_learn_seconds: 20
+
+  # Production: Jetson wired directly to the sensor, running the
+  # container with host networking (docker-compose.yml).
+  #
+  # Longer frame timeout so a brief network stall does not take the
+  # detector down; quieter stats for the journal.
+  prod:
+    source: 169.254.151.172
+    lidar_port: 7502
+    imu_port: 7503
+    frame_timeout: 20.0
+    stats_interval: 10.0
+    data_dir: /app/data
+
+    # Lives on the mounted volume, so it survives an image rebuild.
+    zones_file: /app/data/zones.yaml
+    clip_dir: /app/data/clips
+
+    # Keep the last 30 s of frames in memory, ready to write out.
+    # A dense scene costs more per frame than a sparse one, so the
+    # window is capped in memory too; when the cap bites the buffer
+    # holds less than 30 s and reports the real figure.
+    retain_seconds: 30
+    retain_max_mb: 256
+
+    # The detector API stays on loopback. Only two things listen on the
+    # network: health on 8090 (always), and the inspector on 8080, which
+    # systemd owns -- it starts the inspector sidecar (bound here to
+    # loopback 8088) when someone connects and stops it when they leave.
+    # See deploy/systemd/ and README.md.
+    api_host: 127.0.0.1
+    api_port: 8081
+    cloud_max_points: 60000
+    health_host: 0.0.0.0
+    health_port: 8090
+    inspector_embedded: false
+    inspector_host: 127.0.0.1
+    inspector_port: 8088
+    session_hours: 8
+    auth_file: /app/data/auth.json
+
+    # The M60 via the Luxcom EM-HDLC (see the dev profile for the
+    # ports). Stays on the simulator until the Type 148 call data
+    # layout is implemented (controllers/luxcom.py) and the EM-HDLC's
+    # address is filled in here.
+    controller: simulator
+    # controller: luxcom
+    # controller_host: <EM-HDLC IP>
+    detector_min_points: 20
+    detector_call_delay: 3.0
+    background_file: /app/data/background.npz
+    background_voxel: 0.2
+    background_learn_seconds: 20

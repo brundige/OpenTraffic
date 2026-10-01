@@ -1,0 +1,15 @@
+.git
+.gitignore
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.venv
+venv
+.env
+.DS_Store
+
+# Per-unit state and recordings: mounted at run time, never baked in.
+data
+.idea
+.vscode

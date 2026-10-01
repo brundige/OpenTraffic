@@ -1,0 +1,19 @@
+# Per-unit state: recordings, learned background, zones, credentials.
+# Never commit these -- auth.json in particular holds password hashes.
+data/*
+!data/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Local env overrides
+.env

@@ -1,0 +1,17 @@
+# Forwards :8080 to the inspector on loopback :8088, starting it first.
+# --exit-idle-time stops the proxy once no connection has been open for
+# 15 minutes; the inspector (StopWhenUnneeded) is stopped with it.
+#
+# --exit-idle-time needs systemd 246 or newer: JetPack 6 (Ubuntu 22.04)
+# has it, JetPack 5 (Ubuntu 20.04, systemd 245) does not -- there, drop
+# the flag and stop the inspector by hand (see README.md).
+
+[Unit]
+Description=OpenTraffic inspector (on-demand) - proxy
+Requires=opentraffic-inspector.service
+After=opentraffic-inspector.service
+
+[Service]
+ExecStart=/lib/systemd/systemd-socket-proxyd --exit-idle-time=15min 127.0.0.1:8088
+PrivateTmp=yes
+NoNewPrivileges=yes
