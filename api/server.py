@@ -12,12 +12,18 @@ from urllib.parse import parse_qs, urlparse
 import numpy as np
 
 from controllers import CONTROLLER_KINDS, Controller, find_adapters
+from controllers.network import (
+    add_address, address_in_use, has_address, remove_address, subnet_for, wired_interfaces,
+)
 from perception.ground import fit_plane
 from recording import RollingBuffer
 from settings import SITE_KEYS, write_site
 from zones import Zone, ZoneStore
 from zones.zones import ZoneError
 
+
+# How long an adopted adapter has to show it is talking to us.
+ADOPT_WAIT_S = 5.0
 
 # A zone document is a few kilobytes; anything larger is a mistake
 # or an attack, and we are not going to buffer it.
@@ -127,6 +133,9 @@ def _make_handler(
 
             if route.path == "/api/controller/discover":
                 return self._discover_adapters()
+
+            if route.path == "/api/controller/adopt":
+                return self._adopt_adapter()
 
             if route.path == "/api/background":
                 if background is None:
@@ -243,6 +252,15 @@ def _make_handler(
                 ):
                     raise ZoneError("the EM-HDLC needs an address")
 
+                # Back to the simulator: give up any address taken for
+                # the adapter, so it does not linger on the cabinet LAN.
+                settings = controller.settings
+
+                if kind == "simulator" and settings.controller_local_address:
+                    remove_address(settings.controller_interface, settings.controller_local_address)
+                    changes["controller_local_address"] = ""
+                    changes["controller_interface"] = ""
+
                 pinned = set(changes) & controller.settings.pinned
 
                 if pinned:
@@ -259,6 +277,111 @@ def _make_handler(
                     f"Inspector: controller set to {controller.settings.controller}"
                     + (f" at {controller.settings.controller_host}"
                        if controller.settings.controller == "luxcom" else "")
+                )
+
+                return self._send_json(self._controller_config())
+
+            except ZoneError as exc:
+                return self._send_json({"error": str(exc)}, status=400)
+
+            except Exception as exc:  # noqa: BLE001
+                return self._send_json({"error": f"{type(exc).__name__}: {exc}"}, status=500)
+
+        def _adopt_adapter(self) -> None:
+            """
+            Use an adapter whose command/forward IP is not ours: take
+            that address on the port the adapter was heard on, point
+            the link at the adapter, and keep it only if the adapter
+            answers.
+            """
+
+            if not hasattr(controller, "reconfigure"):
+                return self._send_json({"error": "controller is not configurable"}, status=404)
+
+            try:
+
+                body = self._read_json()
+
+                try:
+                    adapter = str(ipaddress.IPv4Address(str(body.get("adapter", "")).strip()))
+                    wanted = str(ipaddress.IPv4Address(str(body.get("address", "")).strip()))
+                except ValueError:
+                    raise ZoneError("adapter and address must be IPv4 addresses")
+
+                interface = str(body.get("interface") or "")
+
+                if interface not in wired_interfaces():
+                    raise ZoneError(f"{interface!r} is not a wired interface of this unit")
+
+                pinned = {"controller", "controller_host"} & controller.settings.pinned
+
+                if pinned:
+                    raise ZoneError(
+                        f"{', '.join(sorted(pinned))} is set by the unit's environment"
+                    )
+
+                cidr = subnet_for(wanted, adapter)
+                previous = controller.settings
+                taken = False
+
+                if not has_address(interface, wanted):
+
+                    if address_in_use(interface, wanted):
+                        raise ZoneError(
+                            f"{wanted} is in use by another device on {interface}; "
+                            f"set the adapter's command and forward IP to this unit instead"
+                        )
+
+                    add_address(interface, cidr)
+                    taken = True
+
+                changes = {
+                    "controller": "luxcom",
+                    "controller_host": adapter,
+                    "controller_local_address": cidr,
+                    "controller_interface": interface,
+                }
+
+                try:
+                    controller.reconfigure(**changes)
+                except Exception:
+                    if taken:
+                        remove_address(interface, cidr)
+                    raise
+
+                # Keep it only if the adapter now answers or forwards.
+                deadline = time.monotonic() + ADOPT_WAIT_S
+                link = {}
+
+                while time.monotonic() < deadline:
+                    link = controller.link() or {}
+                    if link.get("replies") or link.get("forwarded"):
+                        break
+                    time.sleep(0.25)
+
+                if not (link.get("replies") or link.get("forwarded")):
+
+                    controller.reconfigure(**{
+                        key: getattr(previous, key) for key in changes
+                    })
+
+                    if taken:
+                        remove_address(interface, cidr)
+
+                    return self._send_json({
+                        "error": (
+                            f"took {wanted} on {interface}, but {adapter} sent nothing in "
+                            f"{ADOPT_WAIT_S:.0f} s, so it was given back. Check the adapter's "
+                            f"command and forward ports ({controller.settings.controller_listen_port}"
+                            f" and {controller.settings.controller_forward_port})."
+                        )
+                    }, status=502)
+
+                write_site(controller.settings.site_file, changes)
+
+                print(
+                    f"Inspector: took {cidr} on {interface} for the EM-HDLC at "
+                    f"{adapter}; controller set to luxcom"
                 )
 
                 return self._send_json(self._controller_config())

@@ -404,6 +404,19 @@ detector carries on with the simulator and health reports
 `controller: … could not start`, so it can be put right from the
 inspector.
 
+**An adapter set up for another machine.** An EM-HDLC sends its replies
+and forwarded SDLC frames to the command/forward IP in its web page —
+often the laptop it was configured from. It then keeps trying to reach
+that address, by ARP or (with the answer cached) by sending to it, even
+on a subnet this unit has no address on. **Find** overhears this on the
+wired ports and shows *"192.168.1.124 is set to send to 192.168.1.139,
+which no device has"*. **Use it** checks the address is free (RFC 5227
+ARP probe), adds it to that port, connects, and keeps it only if the
+adapter answers within 5 s; nothing changes on the adapter. The address
+is saved in `site_file` and re-added at every start; choosing the
+simulator gives it back. This needs the detector container's
+`NET_RAW` and `NET_ADMIN` capabilities (`docker-compose.yml`).
+
 ---
 
 ## Troubleshooting
@@ -413,7 +426,8 @@ inspector.
 | `/healthz` says down | `problems` in `/health` (or the Device panel) says why: no sensor answering (power, cable, boot takes ~1 min), port 7502 used by another program, or no packets arriving. Then `RcvbufErrors` (raise `rmem_max`) |
 | No calls | Background learned? Zone enabled, has a channel, saved? Sidebar row shows *waiting*? |
 | Calls show *not sent* | Adapter unreachable — address, cable; check **Controller connection** |
-| **Find** shows no adapter | EM-HDLC powered and on the cabinet network? Type its address instead. Once its forward address is this unit (port 10002) it is always found |
+| **Find** shows no adapter | EM-HDLC powered and cabled to a wired port of this unit (Find does not look on Wi-Fi)? Type its address instead. Once its forward address is this unit (port 10002) it is always found |
+| **Use it** says the address is in use | Another device has the adapter's command/forward IP: set that IP to this unit in the EM-HDLC's web page instead |
 | Zone always occupied | Something static in it was not in the background: relearn with the scene clear |
 | Moving points where nothing moves | Something left the scene after learning, revealing what was behind it: relearn |
 | Signal channels say stale | EM-HDLC forward address must be this unit, port 10002 |

@@ -13,7 +13,12 @@ ENV_PREFIX = "OPENTRAFFIC_"
 # Settings that belong to the cabinet rather than the build: set from
 # the inspector and kept in the unit's site file (data/site.yaml), so
 # installing a unit needs no editing of files or environment.
-SITE_KEYS = ("controller", "controller_host")
+SITE_KEYS = (
+    "controller",
+    "controller_host",
+    "controller_local_address",
+    "controller_interface",
+)
 
 
 @dataclass
@@ -57,6 +62,11 @@ class Settings:
     controller_listen_port: int = 10001
     controller_forward_port: int = 10002
     controller_timeout: int = 5
+    # An address this unit takes for the adapter's sake -- the one its
+    # command/forward IP points at -- as CIDR, on controller_interface.
+    # Set by the inspector's "Use it"; re-applied at every start.
+    controller_local_address: str = ""
+    controller_interface: str = ""
     detector_min_points: int = 20
     detector_call_delay: float = 3.0
     background_file: Path = Path("data/background.npz")

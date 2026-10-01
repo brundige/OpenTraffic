@@ -1688,7 +1688,38 @@ async function loadControllerConfig() {
   el("ctlKind").disabled = pinned.includes("controller");
   el("ctlHost").disabled = pinned.includes("controller_host");
   showCtlHost();
-  if (pinned.length) ctlNote(`${esc(pinned.join(", "))} fixed by the unit's environment`);
+  if (pinned.length) {
+    ctlNote(`${esc(pinned.join(", "))} fixed by the unit's environment`);
+  } else if (ctlConfig.controller === "luxcom" && ctlConfig.controller_local_address) {
+    ctlNote(`this unit answers the adapter as ${esc(ctlConfig.controller_local_address)} ` +
+      `on ${esc(ctlConfig.controller_interface)}`);
+  }
+}
+
+/* An adapter overheard asking for an address nobody has: this unit
+   takes that address (after checking it is free) and connects, and
+   keeps it only if the adapter answers. Nothing changes on the adapter. */
+async function adoptAdapter(a) {
+  ctlNote(`taking ${esc(a.looking_for)} on ${esc(a.interface)} and connecting&hellip;`);
+  el("ctlFound").querySelectorAll("button").forEach((b) => b.disabled = true);
+  try {
+    const res = await api("api/controller/adopt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ adapter: a.address, address: a.looking_for, interface: a.interface }),
+    });
+    const r = await res.json();
+    if (!res.ok) throw new Error(r.error || res.statusText);
+    el("ctlFound").innerHTML = "";
+    await loadControllerConfig();
+    ctlNote(`connected to ${esc(a.address)} &mdash; this unit took ${esc(r.controller_local_address)} ` +
+      `on ${esc(r.controller_interface)}, the address the adapter sends to`, "ok");
+    loadController();
+    loadHealth();
+  } catch (err) {
+    ctlNote(esc(err.message || err), "err");
+    el("ctlFound").querySelectorAll("button").forEach((b) => b.disabled = false);
+  }
 }
 
 function pickAdapter(address) {
@@ -1714,12 +1745,20 @@ el("ctlFind").onclick = async () => {
         `Check the EM-HDLC is powered and on the cabinet network, or type its address. ` +
         `It is always found once its forward address is set to this unit.`;
     } else {
-      el("ctlFound").innerHTML = r.adapters.map((a) =>
-        `<button class="small" style="padding:3px 8px;margin:2px 6px 2px 0" data-ad="${esc(a.address)}">` +
-        `${esc(a.address)}</button>${esc(a.evidence.join("; "))}` +
-        (a.interface ? ` on ${esc(a.interface)}` : "")).join("<br>");
+      el("ctlFound").innerHTML = r.adapters.map((a, i) =>
+        a.looking_for
+          ? `<b>${esc(a.address)}</b> on ${esc(a.interface)} is set to send to ` +
+            `<b>${esc(a.looking_for)}</b>, which no device has.<br>` +
+            `<button class="small" style="padding:3px 8px;margin:3px 0" data-adopt="${i}">` +
+            `Use it</button> this unit takes ${esc(a.looking_for)} and connects; ` +
+            `nothing changes on the adapter.`
+          : `<button class="small" style="padding:3px 8px;margin:2px 6px 2px 0" data-ad="${esc(a.address)}">` +
+            `${esc(a.address)}</button>${esc(a.evidence.join("; "))}` +
+            (a.interface ? ` on ${esc(a.interface)}` : "")).join("<br>");
       el("ctlFound").querySelectorAll("[data-ad]").forEach((b) => b.onclick = () => pickAdapter(b.dataset.ad));
-      if (r.adapters.length === 1) pickAdapter(r.adapters[0].address);
+      el("ctlFound").querySelectorAll("[data-adopt]").forEach((b) =>
+        b.onclick = () => adoptAdapter(r.adapters[+b.dataset.adopt]));
+      if (r.adapters.length === 1 && !r.adapters[0].looking_for) pickAdapter(r.adapters[0].address);
     }
   } catch (err) {
     el("ctlFound").innerHTML = `<span class="err">${esc(err.message || err)}</span>`;
@@ -1853,7 +1892,7 @@ const GUIDE = [
   },
   {
     title: "Connect the controller",
-    text: "Choose the SDLC adapter in Controller connection: Find searches the cabinet network for the EM-HDLC, or type its address. Connect saves it on the unit and switches over at once.",
+    text: "Choose the SDLC adapter in Controller connection: Find searches the cabinet network for the EM-HDLC, or type its address. Connect saves it on the unit and switches over at once. An adapter still set up for another machine shows as set to send to an address no device has: Use it, and this unit takes that address, with no change on the adapter.",
     done: () => !!(lastHealth && lastHealth.controller && lastHealth.controller.kind !== "simulator" &&
                    lastHealth.controller.link_reply_age_s !== null && lastHealth.controller.link_reply_age_s < 10),
     actions: [["Find adapter", () => {

@@ -16,6 +16,15 @@ Two kinds of evidence, collected together over a couple of seconds:
     SDLC-shaped frames there is an adapter, and one that is already
     set up for this unit -- which is what the signal state needs.
 
+  * Overheard: an EM-HDLC whose command/forward IP is some other
+    machine's -- the laptop it was set up with -- keeps ARPing for that
+    address and nobody answers. Listening to ARP on the wired ports
+    finds it even on a subnet this unit has no address on, and says
+    which address it wants; the inspector can then have this unit take
+    that address (controllers/network.py), with no change to the
+    adapter. Seen on the bench: 192.168.1.124 asking ~20 times a second
+    for 192.168.1.139.
+
 If the link to an adapter is already running it owns both ports, so
 what it has heard is passed in as `running` instead.
 """
@@ -31,6 +40,7 @@ from typing import Any, Dict, List, Optional
 import psutil
 
 from .luxcom import CMD_DISCOVER, MAGIC, UI_CONTROL, command
+from .network import ArpListener
 
 
 SKIP_INTERFACES = ("lo", "docker", "br-", "veth", "virbr", "l4tbr", "tailscale", "wg")
@@ -96,8 +106,13 @@ def find_adapters(
 ) -> Dict[str, Any]:
     """
     Adapters seen, each with how it was seen:
-      {"adapters": [{"address", "interface", "evidence": [...]}],
+      {"adapters": [{"address", "interface", "evidence": [...],
+                     "looking_for"?, "mac"?, "reachable"}],
        "searched": [interface, ...], "notes": [...]}
+
+    "looking_for" is set for an adapter overheard asking for an address
+    nobody has; "reachable" is whether this unit already has an address
+    on the adapter's subnet.
     """
 
     networks = _networks()
@@ -139,7 +154,12 @@ def find_adapters(
     if listener is None and not running:
         notes.append(f"port {forward_port} is in use; forwarded frames not checked")
 
-    sockets = [s for s in (asker, listener) if s is not None]
+    arp = ArpListener(ports=(listen_port, forward_port))
+
+    if not arp.available:
+        notes.append("cannot listen to ARP (needs CAP_NET_RAW); adapters on other subnets not seen")
+
+    sockets = [s for s in (asker, listener) if s is not None] + list(arp.sockets)
     own = {n["address"] for n in networks}
 
     deadline = time.monotonic() + wait
@@ -156,6 +176,10 @@ def find_adapters(
             ready, _, _ = select.select(sockets, [], [], remaining)
 
             for sock in ready:
+
+                if sock in arp.sockets:
+                    arp.read(sock)
+                    continue
 
                 try:
                     data, (address, _) = sock.recvfrom(2048)
@@ -175,14 +199,30 @@ def find_adapters(
         for sock in sockets:
             sock.close()
 
-    adapters = [
-        {
+    extra: Dict[str, Dict[str, Any]] = {}
+
+    for device in arp.stranded(own):
+        saw(device["address"], f"trying to reach {device['looking_for']}, which no device here has")
+        extra.setdefault(device["address"], {
+            "looking_for": device["looking_for"],
+            "mac": device["mac"],
+            "arp_interface": device["interface"],
+        })
+
+    adapters = []
+
+    for address, how in sorted(found.items(), key=lambda item: ipaddress.ip_address(item[0])):
+
+        interface = _interface_for(address, networks)
+        more = extra.get(address, {})
+
+        adapters.append({
             "address": address,
-            "interface": _interface_for(address, networks),
+            "interface": interface or more.get("arp_interface"),
             "evidence": sorted(how),
-        }
-        for address, how in sorted(found.items(), key=lambda item: ipaddress.ip_address(item[0]))
-    ]
+            "reachable": interface is not None,
+            **{k: v for k, v in more.items() if k != "arp_interface"},
+        })
 
     return {
         "adapters": adapters,

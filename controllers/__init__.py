@@ -1,6 +1,7 @@
 from .base import MAX_CHANNEL, Controller
 from .discovery import find_adapters
 from .luxcom import LuxcomEMHDLC
+from .network import add_address
 from .simulator import SimulatorController
 from .slot import ControllerSlot
 
@@ -19,6 +20,11 @@ def make_controller(settings) -> Controller:
                 "controller 'luxcom' needs controller_host "
                 "(the EM-HDLC's address)"
             )
+
+        if settings.controller_local_address:
+            # The address the adapter sends to; addresses do not
+            # survive a reboot unless re-added, so add it every start.
+            add_address(settings.controller_interface, settings.controller_local_address)
 
         return LuxcomEMHDLC(
             settings.controller_host,

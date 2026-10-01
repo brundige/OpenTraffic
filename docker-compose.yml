@@ -38,6 +38,14 @@ services:
 
     restart: unless-stopped
 
+    # NET_RAW: listen to ARP to find an EM-HDLC on another subnet.
+    # NET_ADMIN: take the address that adapter sends to (inspector's
+    # "Use it"), so the adapter needs no reconfiguring. Both stay
+    # inside what host networking already exposes to this container.
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+
     stdin_open: true
     tty: true
 
