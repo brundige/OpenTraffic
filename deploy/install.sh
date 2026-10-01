@@ -79,6 +79,13 @@ for unit in deploy/systemd-user/*; do
 done
 
 systemctl --user daemon-reload
+
+# An inspector still running from before this build would keep serving
+# the old page until it idles out; stop it so the next connection
+# starts the new image.
+systemctl --user stop opentraffic-inspector-proxy.service opentraffic-inspector.service 2>/dev/null || true
+docker compose --profile gui rm -sf inspector >/dev/null 2>&1 || true
+
 systemctl --user enable opentraffic-inspector-proxy.socket >/dev/null
 systemctl --user restart opentraffic-inspector-proxy.socket
 
@@ -86,10 +93,10 @@ systemctl --user restart opentraffic-inspector-proxy.socket
 
 say "Done"
 
-address=$(hostname -I | awk '{print $1}')
-
-echo "Inspector:  http://$address:$PORT/   (starts on first connection)"
-echo "Health:     http://$address:8090/healthz"
+echo "Inspector on port $PORT (starts on first connection), health on 8090."
+echo "This unit's addresses -- use the one on the cabinet/city network:"
+ip -4 -br addr show up | awk '$1 !~ /^(lo|docker|br-|veth|l4tbr)/ {
+    for (i = 3; i <= NF; i++) { split($i, a, "/"); printf "  %-12s http://%s:'"$PORT"'/\n", $1, a[1] } }'
 echo
 echo "The sensor is found automatically; choose the controller in the"
 echo "inspector's setup guide. Logs: docker logs -f traffic-detector"
