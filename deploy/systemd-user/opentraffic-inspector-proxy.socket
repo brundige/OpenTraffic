@@ -1,0 +1,15 @@
+# The inspector's public port, held by the user's systemd at all times.
+# It costs nothing while nobody connects; the first connection starts
+# opentraffic-inspector-proxy.service. Port 8080 is above 1024, so no
+# root is needed -- these are user units (deploy/install.sh).
+
+[Unit]
+Description=OpenTraffic inspector (on-demand) - listening socket
+
+[Socket]
+ListenStream=@PORT@
+# Keep the listener up across proxy restarts.
+Accept=no
+
+[Install]
+WantedBy=sockets.target

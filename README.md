@@ -83,8 +83,10 @@ the sidecar's main gain is isolation and a closed attack surface.)
    setup guide (skippable; reopen with **Setup**). It walks through:
    sensor streaming, learning the background, fitting the roadway,
    placing the map, drawing detection zones with detector channels,
-   exclusion zones, saving, checking the controller link, and testing a
-   call. Each step ticks itself off from the unit's live state.
+   exclusion zones, saving, connecting the controller (**Find** searches
+   the cabinet network for the EM-HDLC), checking the link, and testing
+   a call. Each step ticks itself off from the unit's live state. The
+   sensor is found on its own; nothing is configured by hand.
 2. **Leave it.** Close the browser. After 15 minutes the inspector stops;
    detection, calls and health carry on.
 3. **Monitor.** Poll `http://<unit>:8090/healthz` from monitoring; pull
@@ -143,7 +145,10 @@ The setup guide covers this in the page; the reasoning behind each step:
 
 Zones, roadway and map location live in `data/zones.yaml`; the
 background in `data/background.npz`. Both are valid for this mounting
-only — redo them if the sensor is moved.
+only — redo them if the sensor is moved. Both are stamped with the
+sensor's serial number: if a different sensor is connected later,
+health turns *degraded* with "sensor changed" until the background is
+relearned and the zones are checked and saved again.
 
 ---
 
@@ -236,7 +241,7 @@ curl -H "Authorization: Bearer <token>" http://<unit>:8090/health
 
 | | Meaning |
 |---|---|
-| `down` | no LiDAR frame for 5 s — the unit is not detecting |
+| `down` | no LiDAR frame for 5 s — the unit is not detecting. The problem says what the sensor link is doing: searching, or why it could not connect |
 | `degraded` | detecting, but: adapter not replying, controller not polling, no signal state, background not learned, memory or disk > 90 %, board ≥ 85 °C |
 | `ok` | none of the above |
 
@@ -261,41 +266,62 @@ The inspector's **Device** panel shows the same report.
 temperature fanless box): see the *OpenTraffic Cabinet Hardware Parts
 List* document.
 
+**Finding the sensor.** The prod profile has `source: auto`: the
+detector asks for `_ouster-lidar._tcp` over mDNS on every interface,
+checks each answer against the sensor's HTTP API, and connects to the
+one it finds, so any OS-1 works without configuring its address. If
+the sensor is missing, unplugged later or still booting, the detector
+keeps running (health, inspector, controller keep-alive) and retries
+every few seconds; `/health` and the Device panel say what it is
+doing. If more than one sensor answers, it picks the one the unit was
+set up with (by serial), or set `OPENTRAFFIC_SENSOR_INTERFACE` to the
+LiDAR port. Set `OPENTRAFFIC_SOURCE` to an address to skip the search.
+
 **JetPack.** Prefer JetPack 6 (Ubuntu 22.04): its systemd supports the
 inspector's idle shutdown, and the Ouster SDK installs directly. The
 current image is Debian-based to support JetPack 4 hosts; on JetPack 6 it
 can move to an L4T base if GPU work is added later.
 
+Root is needed once per unit, to prepare the host; everything after
+that runs as the unit's user, with no sudo.
+
 ```sh
-# 1. Code
-sudo git clone https://github.com/brundige/OpenTraffic.git /opt/opentraffic
-cd /opt/opentraffic
+# 1. Code, owned by the user who runs it (any path works)
+git clone https://github.com/brundige/OpenTraffic.git ~/opentraffic
+cd ~/opentraffic
 
-# 2. Build, stamped with the version the health report shows
-sudo OPENTRAFFIC_VERSION=$(git describe --always --dirty) docker compose build
+# 2. Once per unit, on the bench: Docker access and lingering for this
+#    user, the UDP receive buffer, the LiDAR port's addresses, hostname
+sudo LIDAR_IF=enP8p1s0 UNIT_NAME=ot-main-and-5th deploy/provision-host.sh
+#    (log out and in if it just added you to the docker group)
 
-# 3. Credentials (stored in ./data/auth.json, owner-only)
-sudo docker compose run --rm detector python auth.py set-password
-sudo docker compose run --rm detector python auth.py health-token
+# 3. Build, set the operator password, start the detector, install the
+#    on-demand inspector on :8080 -- no sudo
+deploy/install.sh
 
-# 4. Detector, always on
-sudo docker compose up -d detector
-
-# 5. On-demand inspector on :8080
-sudo deploy/install-inspector.sh
-
-# 6. UDP receive buffer, or packets drop at ~127 Mbit/s (OS-1-128, 10 Hz)
-echo 'net.core.rmem_max=8388608' | sudo tee /etc/sysctl.d/60-opentraffic.conf
-sudo sysctl --system
+# 4. Optional: a token for the full /health report
+docker compose run --rm detector python auth.py health-token
 ```
 
-On JetPack 5 (systemd 245) remove `--exit-idle-time=15min` from
-`opentraffic-inspector-proxy.service`; the inspector then stays up after
-first use until stopped with
-`sudo systemctl stop opentraffic-inspector-proxy opentraffic-inspector`.
+**Update:** `git pull && deploy/install.sh`. Zones, background, site
+settings and credentials in `data/` survive.
 
-Update: `git pull`, rebuild as in step 2, `docker compose up -d detector`.
-Zones, background and credentials in `data/` survive.
+**What runs where.** The detector is a Docker container that Docker
+restarts at boot. The inspector is three systemd **user** units in
+`~/.config/systemd/user` (port 8080 needs no root): a socket that holds
+the port, a proxy started on the first connection, and the inspector
+container, stopped again after 15 idle minutes. If the inspector dies,
+the proxy goes with it and the next connection starts both again.
+Lingering keeps them running with nobody logged in.
+
+On JetPack 5 (systemd 245) remove `--exit-idle-time=15min` from
+`deploy/systemd-user/opentraffic-inspector-proxy.service`; the inspector
+then stays up after first use until
+`systemctl --user stop opentraffic-inspector-proxy opentraffic-inspector`.
+
+**Moving from the old system-wide units** (`deploy/install-inspector.sh`,
+removed): `deploy/install.sh` prints the one `sudo` command that takes
+them out, since they hold port 8080.
 
 ---
 
@@ -353,9 +379,11 @@ can be overridden with `OPENTRAFFIC_<NAME>`, e.g.
 
 | Setting | dev | prod | |
 |---|---|---|---|
-| `source` | 169.254.151.172 | same | sensor address, or a recording |
+| `source` | 169.254.151.172 | auto | sensor address, `auto`, or a recording |
+| `sensor_interface` | — | "" | limit the `auto` search to one interface (the LiDAR port) |
 | `controller` | luxcom | simulator* | `simulator` or `luxcom` |
 | `controller_host` | 192.168.1.124 | — | EM-HDLC address |
+| `site_file` | data/site.yaml | /app/data/site.yaml | controller and address chosen in the inspector |
 | `detector_min_points` | 20 | 20 | moving points to count as present |
 | `detector_call_delay` | 3.0 | 3.0 | seconds of presence before a call |
 | `background_learn_seconds` | 20 | 20 | |
@@ -365,7 +393,16 @@ can be overridden with `OPENTRAFFIC_<NAME>`, e.g.
 | `health_host` | 127.0.0.1 | 0.0.0.0 | |
 | `retain_seconds` / `retain_max_mb` | 30 / 256 | 30 / 256 | rolling buffer for clips |
 
-\* Set `controller: luxcom` and `controller_host` per site.
+\* Per site, choose the controller in the inspector's **Controller
+connection** panel (or the setup guide): it is applied at once and saved
+in `site_file`, which overrides the profile. An `OPENTRAFFIC_CONTROLLER`
+or `OPENTRAFFIC_CONTROLLER_HOST` in the environment overrides both, and
+the panel then shows the setting as fixed.
+
+If the chosen controller cannot start (its port is taken, say), the
+detector carries on with the simulator and health reports
+`controller: … could not start`, so it can be put right from the
+inspector.
 
 ---
 
@@ -373,13 +410,14 @@ can be overridden with `OPENTRAFFIC_<NAME>`, e.g.
 
 | Symptom | Look at |
 |---|---|
-| `/healthz` says down | Sensor power/cable; `RcvbufErrors` in `/health` (raise `rmem_max`) |
+| `/healthz` says down | `problems` in `/health` (or the Device panel) says why: no sensor answering (power, cable, boot takes ~1 min), port 7502 used by another program, or no packets arriving. Then `RcvbufErrors` (raise `rmem_max`) |
 | No calls | Background learned? Zone enabled, has a channel, saved? Sidebar row shows *waiting*? |
-| Calls show *not sent* | Adapter unreachable — address, cable, `controller_host` |
+| Calls show *not sent* | Adapter unreachable — address, cable; check **Controller connection** |
+| **Find** shows no adapter | EM-HDLC powered and on the cabinet network? Type its address instead. Once its forward address is this unit (port 10002) it is always found |
 | Zone always occupied | Something static in it was not in the background: relearn with the scene clear |
 | Moving points where nothing moves | Something left the scene after learning, revealing what was behind it: relearn |
 | Signal channels say stale | EM-HDLC forward address must be this unit, port 10002 |
-| Inspector will not load on :8080 | `systemctl status opentraffic-inspector-proxy.socket`, `journalctl -u opentraffic-inspector` |
+| Inspector will not load on :8080 | `systemctl --user status opentraffic-inspector-proxy.socket opentraffic-inspector`, `journalctl --user -u opentraffic-inspector` |
 | Login says no login is set | `docker compose run --rm detector python auth.py set-password` |
 
 ---
@@ -399,7 +437,7 @@ zones/               zone/roadway/map storage and validation
 recording/           rolling buffer and clips
 sensors/             Ouster and clip sources
 config/profiles.yaml dev and prod settings
-deploy/              systemd units for the on-demand inspector
+deploy/              provision-host.sh (root, once), install.sh, user units
 docker/, docker-compose.yml   Jetson image and services
 data/                per-unit state (git-ignored)
 ```

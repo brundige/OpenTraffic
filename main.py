@@ -5,38 +5,34 @@ import time
 import numpy as np
 from api import DetectorApi, HealthServer
 from auth import AuthStore
-from controllers import make_controller
+from controllers import ControllerSlot, make_controller
 from health import FrameStats, Health, detect_version
 from perception.background import BackgroundModel
 from perception.presence import PresenceDetector
 from recording import RollingBuffer
-from sensors import ClipLidar, OusterLidar
+from sensors import SensorLink
 from settings import load_settings
 from zones import ZoneStore
 
 
 running = True
 
-
-UDP_HINT = """
-The sensor was reachable over TCP but no LiDAR packets arrived.
-Check that the UDP destination above is an address on THIS machine:
-
-  * On a Jetson (prod), the container needs network_mode: host so it
-    shares the host's interfaces. Confirm the sensor is wired to the
-    interface holding that address.
-  * On macOS (dev), do NOT run in Docker. Docker Desktop gives the
-    container the Linux VM's network, not the Mac's interfaces, so
-    the stream lands on the Mac and never reaches the container.
-"""
+lidar = None
 
 
 def shutdown_handler(signum, frame):
     global running
     running = False
 
+    # The sensor link may be waiting to retry rather than in the frame
+    # loop; wake it so the detector stops promptly.
+    if lidar is not None:
+        lidar.stop()
+
 
 def main():
+
+    global lidar
 
     parser = argparse.ArgumentParser(
         description="OpenTraffic LiDAR detector"
@@ -57,7 +53,8 @@ def main():
         default=None,
         help=(
             "override the profile's source: an Ouster hostname or IP, "
-            "or a path to a .pcap / .osf / .bag recording"
+            "'auto' to find the sensor on the network, "
+            "or a path to a .npz / .pcap / .osf / .bag recording"
         ),
     )
 
@@ -75,7 +72,6 @@ def main():
     signal.signal(signal.SIGINT, shutdown_handler)
     signal.signal(signal.SIGTERM, shutdown_handler)
 
-    lidar = None
     servers = []
     controller = None
     total_frames = 0
@@ -90,8 +86,10 @@ def main():
         print(f"Profile: {settings.profile}")
         print("=" * 60)
 
-        # Health first, before the sensor: if the LiDAR cannot be
-        # reached, the health endpoint is how anyone finds out.
+        # Everything starts before the sensor, and keeps running while
+        # there is none: if the LiDAR is unplugged, still booting or
+        # somewhere unexpected, the health endpoint and the inspector
+        # are how anyone finds out.
         frame_stats = FrameStats()
         health = Health(settings, frame_stats, version=detect_version())
 
@@ -106,16 +104,6 @@ def main():
 
         print(f"Health: http://{settings.health_host}:{settings.health_port}/healthz")
 
-        if settings.source.endswith(".npz"):
-            lidar = ClipLidar(settings.source, realtime=args.realtime)
-        else:
-            lidar = OusterLidar(
-                settings.source,
-                lidar_port=settings.lidar_port,
-                imu_port=settings.imu_port,
-                frame_timeout=settings.frame_timeout,
-            )
-
         recent = RollingBuffer(
             seconds=settings.retain_seconds,
             max_bytes=settings.retain_max_mb << 20,
@@ -123,7 +111,7 @@ def main():
 
         store = ZoneStore(settings.zones_file)
 
-        controller = make_controller(settings)
+        controller = ControllerSlot(settings, make_controller)
 
         presence = PresenceDetector(
             store,
@@ -135,6 +123,21 @@ def main():
             settings.background_file,
             voxel=settings.background_voxel,
             learn_seconds=settings.background_learn_seconds,
+            sensor_serial=lambda: lidar.describe().get("serial"),
+        )
+
+        # The sensor the unit was set up with, to pick it out if the
+        # search finds more than one.
+        lidar = SensorLink(
+            settings.source,
+            interface=settings.sensor_interface,
+            lidar_port=settings.lidar_port,
+            imu_port=settings.imu_port,
+            frame_timeout=settings.frame_timeout,
+            realtime=args.realtime,
+            expected_serial=lambda: (
+                background.status()["sensor_serial"] or health.zones_serial()
+            ),
         )
 
         if not background.learned:
@@ -163,6 +166,8 @@ def main():
         health.background = background
         health.controller = controller
         health.presence = presence
+        health.link = lidar
+        health.store = store
 
         api = DetectorApi(
             recent,
@@ -205,7 +210,8 @@ def main():
         print(f"Clips: {settings.clip_dir}")
 
         print()
-        print("Receiving LiDAR frames...")
+        print(f"Sensor: {settings.source}"
+              + (f" on {settings.sensor_interface}" if settings.sensor_interface else ""))
         print()
 
         start_time = time.monotonic()
@@ -284,9 +290,6 @@ def main():
         print()
         print("ERROR:")
         print(exc)
-
-        if "No valid frames received" in str(exc):
-            print(UDP_HINT)
 
         return 1
 

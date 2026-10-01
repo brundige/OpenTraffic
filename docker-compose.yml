@@ -8,7 +8,8 @@
 #   inspector   the web page and login, on demand. It is in the "gui"
 #               profile, so "docker compose up -d" does not start it;
 #               systemd does, when someone connects to :8080, and stops
-#               it again once they have gone (deploy/systemd/).
+#               it again once they have gone (deploy/systemd-user/,
+#               installed by deploy/install.sh).
 #
 # network_mode: host is required -- the sensor streams UDP straight at
 # the host's interface, so the container must share it. That works on
@@ -47,7 +48,9 @@ services:
       PYTHONUNBUFFERED: "1"
       OPENTRAFFIC_PROFILE: "prod"
       # Override the profile without rebuilding, e.g.:
-      # OPENTRAFFIC_SOURCE: "169.254.151.172"
+      # OPENTRAFFIC_SOURCE: "169.254.151.172"   (default: found automatically)
+      # The controller is chosen in the inspector (data/site.yaml);
+      # setting it here fixes it and the inspector cannot change it.
 
     command:
       - python

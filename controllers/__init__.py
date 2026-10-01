@@ -1,6 +1,8 @@
 from .base import MAX_CHANNEL, Controller
+from .discovery import find_adapters
 from .luxcom import LuxcomEMHDLC
 from .simulator import SimulatorController
+from .slot import ControllerSlot
 
 CONTROLLER_KINDS = ("simulator", "luxcom")
 
@@ -36,7 +38,9 @@ __all__ = [
     "CONTROLLER_KINDS",
     "MAX_CHANNEL",
     "Controller",
+    "ControllerSlot",
     "LuxcomEMHDLC",
     "SimulatorController",
+    "find_adapters",
     "make_controller",
 ]

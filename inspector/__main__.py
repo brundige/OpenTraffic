@@ -5,7 +5,7 @@ Run the inspector on its own, as the sidecar next to a running detector:
     python -m inspector --profile prod
 
 On the Jetson, systemd starts this when someone connects and stops it
-once they have gone (deploy/systemd/).
+once they have gone (deploy/systemd-user/).
 """
 
 import argparse

@@ -4,7 +4,7 @@ import os
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -88,11 +88,17 @@ class BackgroundModel:
         voxel: float = 0.2,
         learn_seconds: float = 20.0,
         occupancy: float = 0.8,
+        sensor_serial: Optional[Callable[[], Optional[str]]] = None,
     ):
         self.path = Path(path) if path else None
         self.voxel = float(voxel)
         self.learn_seconds = float(learn_seconds)
         self.occupancy = float(occupancy)
+
+        # The serial of the sensor in use, stamped on what is learned:
+        # a background only fits the sensor (and mounting) it came from.
+        self._current_serial = sensor_serial or (lambda: None)
+        self._sensor_serial: Optional[str] = None
 
         self._lock = threading.Lock()
         self._table: Optional[np.ndarray] = None
@@ -134,6 +140,8 @@ class BackgroundModel:
 
         learned_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
+        serial = self._current_serial()
+
         with self._lock:
 
             # A newer learn() started meanwhile; this result is stale.
@@ -143,12 +151,13 @@ class BackgroundModel:
             self._table = table
             self._voxels = int(static.size)
             self._learned_at = learned_at
+            self._sensor_serial = serial
             self._learning = None
 
         if self.path:
-            self._save(static, learned_at)
+            self._save(static, learned_at, serial)
 
-    def _save(self, static: np.ndarray, learned_at: str) -> None:
+    def _save(self, static: np.ndarray, learned_at: str, serial: Optional[str]) -> None:
 
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -159,6 +168,7 @@ class BackgroundModel:
             keys=static,
             voxel=np.float64(self.voxel),
             learned_at=np.array(learned_at),
+            sensor_serial=np.array(serial or ""),
         )
 
         os.replace(temporary, self.path)
@@ -173,6 +183,9 @@ class BackgroundModel:
 
             static = data["keys"]
             self._learned_at = str(data["learned_at"])
+
+            if "sensor_serial" in data.files:
+                self._sensor_serial = str(data["sensor_serial"]) or None
 
         self._table = _table(static)
         self._voxels = int(static.size)
@@ -251,6 +264,7 @@ class BackgroundModel:
                 "voxels": self._voxels,
                 "voxel": self.voxel,
                 "learned_at": self._learned_at,
+                "sensor_serial": self._sensor_serial,
                 "learning": progress,
                 "path": str(self.path) if self.path else None,
             }

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress
 import json
 import threading
 import time
@@ -10,9 +11,10 @@ from urllib.parse import parse_qs, urlparse
 
 import numpy as np
 
-from controllers import Controller
+from controllers import CONTROLLER_KINDS, Controller, find_adapters
 from perception.ground import fit_plane
 from recording import RollingBuffer
+from settings import SITE_KEYS, write_site
 from zones import Zone, ZoneStore
 from zones.zones import ZoneError
 
@@ -98,6 +100,9 @@ def _make_handler(
                 if route.path == "/api/zones":
                     return self._send_json(store.load())
 
+                if route.path == "/api/controller/config":
+                    return self._send_json(self._controller_config())
+
                 if route.path == "/api/controller":
                     if controller is None:
                         return self._send_json({"controller": None})
@@ -119,6 +124,9 @@ def _make_handler(
 
             if route.path == "/api/roadway":
                 return self._fit_roadway()
+
+            if route.path == "/api/controller/discover":
+                return self._discover_adapters()
 
             if route.path == "/api/background":
                 if background is None:
@@ -154,12 +162,17 @@ def _make_handler(
 
             route = urlparse(self.path)
 
+            if route.path == "/api/controller/config":
+                return self._configure_controller()
+
             if route.path != "/api/zones":
                 return self._send_json({"error": "not found"}, status=404)
 
             try:
 
-                document = store.save(self._read_json(), sensor=describe())
+                # Before any sensor has connected there is nothing to
+                # stamp; keep the document's own record.
+                document = store.save(self._read_json(), sensor=describe() or None)
 
                 print(
                     f"Inspector: saved {len(document['zones'])} zone(s) "
@@ -173,6 +186,120 @@ def _make_handler(
 
             except Exception as exc:  # noqa: BLE001
                 return self._send_json({"error": str(exc)}, status=500)
+
+        # ------------------------------------------------------ controller
+
+        def _controller_config(self) -> Dict[str, Any]:
+
+            if not hasattr(controller, "reconfigure"):
+                return {"configurable": False}
+
+            settings = controller.settings
+
+            return {
+                "configurable": True,
+                "kinds": list(CONTROLLER_KINDS),
+                **{key: getattr(settings, key) for key in SITE_KEYS},
+                "ports": {
+                    "command": settings.controller_port,
+                    "reply": settings.controller_listen_port,
+                    "forward": settings.controller_forward_port,
+                },
+                # Fixed by the environment or command line: changing
+                # them here would not survive a restart.
+                "pinned": sorted(set(SITE_KEYS) & settings.pinned),
+                "site_file": str(settings.site_file),
+            }
+
+        def _configure_controller(self) -> None:
+
+            if not hasattr(controller, "reconfigure"):
+                return self._send_json({"error": "controller is not configurable"}, status=404)
+
+            try:
+
+                body = self._read_json()
+
+                changes = {key: body[key] for key in SITE_KEYS if key in body}
+
+                kind = changes.get("controller", controller.settings.controller)
+
+                if kind not in CONTROLLER_KINDS:
+                    raise ZoneError(
+                        f"controller must be one of {', '.join(CONTROLLER_KINDS)}"
+                    )
+
+                if "controller_host" in changes:
+                    host = str(changes["controller_host"] or "").strip()
+                    if host:
+                        try:
+                            ipaddress.IPv4Address(host)
+                        except ValueError:
+                            raise ZoneError(f"{host!r} is not an IPv4 address")
+                    changes["controller_host"] = host
+
+                if kind == "luxcom" and not changes.get(
+                    "controller_host", controller.settings.controller_host
+                ):
+                    raise ZoneError("the EM-HDLC needs an address")
+
+                pinned = set(changes) & controller.settings.pinned
+
+                if pinned:
+                    raise ZoneError(
+                        f"{', '.join(sorted(pinned))} is set by the unit's "
+                        f"environment and cannot be changed here"
+                    )
+
+                controller.reconfigure(**changes)
+
+                write_site(controller.settings.site_file, changes)
+
+                print(
+                    f"Inspector: controller set to {controller.settings.controller}"
+                    + (f" at {controller.settings.controller_host}"
+                       if controller.settings.controller == "luxcom" else "")
+                )
+
+                return self._send_json(self._controller_config())
+
+            except ZoneError as exc:
+                return self._send_json({"error": str(exc)}, status=400)
+
+            except Exception as exc:  # noqa: BLE001
+                return self._send_json({"error": f"{type(exc).__name__}: {exc}"}, status=500)
+
+        def _discover_adapters(self) -> None:
+
+            try:
+
+                settings = getattr(controller, "settings", None)
+
+                running = None
+
+                if controller is not None and controller.describe().get("kind") == "luxcom":
+                    running = controller.link()
+
+                ports = {}
+
+                if settings is not None:
+                    ports = {
+                        "port": settings.controller_port,
+                        "listen_port": settings.controller_listen_port,
+                        "forward_port": settings.controller_forward_port,
+                    }
+
+                result = find_adapters(running=running, **ports)
+
+                print(
+                    f"Inspector: adapter search found "
+                    f"{len(result['adapters'])} on {', '.join(result['searched']) or 'no interface'}"
+                )
+
+                return self._send_json(result)
+
+            except Exception as exc:  # noqa: BLE001
+                return self._send_json({"error": f"{type(exc).__name__}: {exc}"}, status=500)
 
         # --------------------------------------------------------- helpers
 

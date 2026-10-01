@@ -1,15 +1,14 @@
 # The inspector container itself. Only ever started as a dependency of
-# the proxy, and stopped as soon as the proxy no longer needs it.
+# the proxy, and stopped as soon as the proxy no longer needs it. Runs
+# as the installing user, who is in the docker group.
 
 [Unit]
 Description=OpenTraffic inspector (on-demand) - container
 StopWhenUnneeded=yes
-After=docker.service
-Requires=docker.service
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/opentraffic
+WorkingDirectory=@CHECKOUT@
 ExecStart=/usr/bin/docker compose --profile gui up --no-deps inspector
 # Hold the proxy back until the inspector is actually listening.
 ExecStartPost=/bin/sh -c 'for i in $(seq 1 60); do nc -z 127.0.0.1 8088 && exit 0; sleep 0.5; done; exit 1'

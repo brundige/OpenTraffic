@@ -6,9 +6,11 @@ The report has one overall status -- ok, degraded or down -- and the
 reasons behind it, so a monitor can alert on a single field and a
 person can see why.
 
-  down       no LiDAR frames: the unit is not detecting anything
+  down       no LiDAR frames: the unit is not detecting anything (the
+             problem says whether it is still looking for the sensor)
   degraded   detecting, but something needs attention: the controller
-             link is quiet, the background is not learned, the disk or
+             link is quiet, the background is not learned, the sensor
+             is not the one the unit was set up with, the disk or
              memory is nearly full, the board is hot, packets are being
              dropped
   ok         everything above is fine
@@ -194,6 +196,8 @@ class Health:
         background=None,
         controller=None,
         presence=None,
+        link=None,
+        store=None,
         version: str = "",
     ):
         self.settings = settings
@@ -202,9 +206,26 @@ class Health:
         self.background = background
         self.controller = controller
         self.presence = presence
+        self.link = link
+        self.store = store
         self.version = version
         self.process = psutil.Process()
         self.process.cpu_percent(None)       # prime the CPU meter
+
+    def zones_serial(self) -> Optional[str]:
+        """
+        The serial of the sensor the zones were saved with, if any.
+        """
+
+        if self.store is None:
+            return None
+
+        try:
+            serial = (self.store.load().get("sensor") or {}).get("serial")
+        except Exception:  # noqa: BLE001 - a bad zone file is reported elsewhere
+            return None
+
+        return str(serial) if serial else None
 
     def liveness(self) -> Dict[str, Any]:
         """
@@ -220,13 +241,17 @@ class Health:
 
         frames = self.frames.snapshot()
         age = frames["last_frame_age_s"]
+        sensor_link = self.link.status() if self.link else None
 
         if age is None or age > FRAME_STALE_S:
             status = "down"
-            problems.append(
+            problem = (
                 "no LiDAR frames yet" if age is None
                 else f"no LiDAR frame for {age:.0f} s"
             )
+            if sensor_link and sensor_link["state"] != "streaming":
+                problem += f": {sensor_link['message']}"
+            problems.append(problem)
 
         def degrade(reason: str) -> None:
             nonlocal status
@@ -239,6 +264,28 @@ class Health:
 
         if background is not None and not background["learned"]:
             degrade("background not learned: no calls are placed")
+
+        # ---- the same sensor the unit was set up with?
+        serial = sensor_link.get("serial") if sensor_link else None
+
+        if serial:
+
+            learned_with = (background or {}).get("sensor_serial")
+
+            if background and background["learned"] and learned_with and learned_with != serial:
+                degrade(
+                    f"sensor changed: the background was learned with sensor "
+                    f"{learned_with}, this is {serial} -- relearn it"
+                )
+
+            drawn_for = self.zones_serial()
+
+            if drawn_for and drawn_for != serial:
+                degrade(
+                    f"sensor changed: the zones were drawn for sensor "
+                    f"{drawn_for}, this is {serial} -- check them against "
+                    f"the cloud and save"
+                )
 
         # ---- controller link
         controller = None
@@ -264,6 +311,9 @@ class Health:
                 "biu_enabled": link.get("biu_enabled"),
                 "signals_live": bool(phases) and not phases.get("stale", False),
             }
+
+            if st.get("setup_error"):
+                degrade(f"controller: {st['setup_error']}")
 
             if st["controller"]["kind"] != "simulator":
 
@@ -323,6 +373,7 @@ class Health:
             "sensor": {
                 "source": self.settings.source,
                 **frames,
+                "link": sensor_link,
             },
             "detection": {
                 "background": background,

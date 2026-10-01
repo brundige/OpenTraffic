@@ -205,6 +205,7 @@ class LuxcomEMHDLC(Controller):
         self._link_lock = threading.Lock()
         self._last_reply: Optional[float] = None
         self._last_reply_hex = ""
+        self._reply_from: Optional[str] = None
         self._replies = 0
         self._last_error: Optional[str] = None
         self._forwarded = 0
@@ -293,7 +294,7 @@ class LuxcomEMHDLC(Controller):
         while self._running:
 
             try:
-                data, _ = self.socket.recvfrom(1024)
+                data, (sender, _) = self.socket.recvfrom(1024)
             except socket.timeout:
                 continue
             except OSError:
@@ -304,6 +305,7 @@ class LuxcomEMHDLC(Controller):
             with self._link_lock:
                 self._last_reply = time.time()
                 self._last_reply_hex = data.hex(" ")
+                self._reply_from = sender
                 self._replies += 1
                 self._last_error = None
 
@@ -383,6 +385,7 @@ class LuxcomEMHDLC(Controller):
                 "replies": self._replies,
                 "last_reply": self._last_reply,
                 "last_reply_hex": self._last_reply_hex,
+                "reply_from": self._reply_from,
                 "error": self._last_error,
                 "biu_enabled": self._enabled,
                 "forward_port": self.forward_port,

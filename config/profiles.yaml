@@ -15,7 +15,8 @@ profiles:
   # A macOS container gets the Linux VM's network, not the Mac's
   # interfaces, so the sensor's UDP stream never reaches it.
   #
-  # "source" also accepts a path to a recording (.pcap / .osf / .bag)
+  # "source" also accepts "auto" (find the sensor on the network, as
+  # prod does), or a path to a recording (.npz / .pcap / .osf / .bag)
   # for working away from the hardware.
   dev:
     source: 169.254.151.172
@@ -25,6 +26,8 @@ profiles:
     stats_interval: 1.0
     data_dir: data
     zones_file: data/zones.yaml
+    # Controller choice and address, set from the inspector.
+    site_file: data/site.yaml
     clip_dir: data/clips
 
     # Keep the last 30 s of frames in memory, ready to write out.
@@ -82,7 +85,11 @@ profiles:
   # Longer frame timeout so a brief network stall does not take the
   # detector down; quieter stats for the journal.
   prod:
-    source: 169.254.151.172
+    # "auto" finds the sensor over mDNS, so any OS-1 on the LiDAR port
+    # works without configuring its address. sensor_interface limits the
+    # search to that port (e.g. enP8p1s0); empty searches everywhere.
+    source: auto
+    sensor_interface: ""
     lidar_port: 7502
     imu_port: 7503
     frame_timeout: 20.0
@@ -91,6 +98,9 @@ profiles:
 
     # Lives on the mounted volume, so it survives an image rebuild.
     zones_file: /app/data/zones.yaml
+    # Controller choice and address, set from the inspector's setup
+    # guide; they override the controller settings below.
+    site_file: /app/data/site.yaml
     clip_dir: /app/data/clips
 
     # Keep the last 30 s of frames in memory, ready to write out.
@@ -104,7 +114,7 @@ profiles:
     # network: health on 8090 (always), and the inspector on 8080, which
     # systemd owns -- it starts the inspector sidecar (bound here to
     # loopback 8088) when someone connects and stops it when they leave.
-    # See deploy/systemd/ and README.md.
+    # See deploy/systemd-user/ and README.md.
     api_host: 127.0.0.1
     api_port: 8081
     cloud_max_points: 60000

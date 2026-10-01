@@ -323,6 +323,26 @@
       </div>
     </div>
 
+    <div class="section" id="ctlSection">
+      <h2>Controller connection</h2>
+      <div class="row">
+        <select id="ctlKind" class="grow">
+          <option value="simulator">Simulator (no controller)</option>
+          <option value="luxcom">M60 via Luxcom EM-HDLC</option>
+        </select>
+      </div>
+      <div class="row" id="ctlHostRow">
+        <label>Adapter</label>
+        <input type="text" id="ctlHost" placeholder="EM-HDLC address" spellcheck="false">
+        <button id="ctlFind" class="small" style="padding:5px 8px;flex:none">Find</button>
+      </div>
+      <div class="keys" id="ctlFound"></div>
+      <div class="row">
+        <button id="ctlApply" class="grow">Connect</button>
+      </div>
+      <div class="keys" id="ctlStatus"></div>
+    </div>
+
     <div class="section">
       <h2>Recording</h2>
       <div class="row">
@@ -1637,6 +1657,108 @@ async function loadController() {
   box.innerHTML = html;
 }
 
+/* ------------------------------------------------ controller connection */
+
+/* Which controller the unit calls, and the adapter's address. Saved on
+   the unit (data/site.yaml) and applied at once, without a restart. */
+let ctlConfig = null;
+
+function ctlNote(html, cls = "") {
+  el("ctlStatus").className = "keys " + cls;
+  el("ctlStatus").innerHTML = html;
+}
+
+function showCtlHost() {
+  el("ctlHostRow").style.display = el("ctlKind").value === "luxcom" ? "" : "none";
+}
+
+async function loadControllerConfig() {
+  try {
+    ctlConfig = await (await api("api/controller/config", { cache: "no-store" })).json();
+  } catch (err) {
+    return;
+  }
+  if (!ctlConfig.configurable) {
+    el("ctlSection").style.display = "none";
+    return;
+  }
+  const pinned = ctlConfig.pinned || [];
+  el("ctlKind").value = ctlConfig.controller;
+  el("ctlHost").value = ctlConfig.controller_host || "";
+  el("ctlKind").disabled = pinned.includes("controller");
+  el("ctlHost").disabled = pinned.includes("controller_host");
+  showCtlHost();
+  if (pinned.length) ctlNote(`${esc(pinned.join(", "))} fixed by the unit's environment`);
+}
+
+function pickAdapter(address) {
+  el("ctlKind").value = "luxcom";
+  showCtlHost();
+  el("ctlHost").value = address;
+  ctlNote("press Connect to use this adapter");
+}
+
+el("ctlKind").onchange = showCtlHost;
+
+el("ctlFind").onclick = async () => {
+  const button = el("ctlFind");
+  button.disabled = true;
+  el("ctlFound").innerHTML = "searching the cabinet network&hellip;";
+  try {
+    const res = await api("api/controller/discover", { method: "POST" });
+    const r = await res.json();
+    if (!res.ok) throw new Error(r.error || res.statusText);
+    if (!r.adapters.length) {
+      el("ctlFound").innerHTML =
+        `<span class="err">no adapter found</span> on ${esc(r.searched.join(", ") || "any interface")}. ` +
+        `Check the EM-HDLC is powered and on the cabinet network, or type its address. ` +
+        `It is always found once its forward address is set to this unit.`;
+    } else {
+      el("ctlFound").innerHTML = r.adapters.map((a) =>
+        `<button class="small" style="padding:3px 8px;margin:2px 6px 2px 0" data-ad="${esc(a.address)}">` +
+        `${esc(a.address)}</button>${esc(a.evidence.join("; "))}` +
+        (a.interface ? ` on ${esc(a.interface)}` : "")).join("<br>");
+      el("ctlFound").querySelectorAll("[data-ad]").forEach((b) => b.onclick = () => pickAdapter(b.dataset.ad));
+      if (r.adapters.length === 1) pickAdapter(r.adapters[0].address);
+    }
+  } catch (err) {
+    el("ctlFound").innerHTML = `<span class="err">${esc(err.message || err)}</span>`;
+  }
+  button.disabled = false;
+};
+
+el("ctlApply").onclick = async () => {
+  const pinned = (ctlConfig && ctlConfig.pinned) || [];
+  const body = {};
+  if (!pinned.includes("controller")) body.controller = el("ctlKind").value;
+  if (el("ctlKind").value === "luxcom" && !pinned.includes("controller_host")) {
+    body.controller_host = el("ctlHost").value.trim();
+  }
+  const button = el("ctlApply");
+  button.disabled = true;
+  ctlNote("connecting&hellip;");
+  try {
+    const res = await api("api/controller/config", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const r = await res.json();
+    if (!res.ok) throw new Error(r.error || res.statusText);
+    ctlNote(r.controller === "luxcom"
+      ? `saved &mdash; calls now go to ${esc(r.controller_host)}; watch the link below`
+      : "saved &mdash; using the simulator", "ok");
+    await loadControllerConfig();
+    loadController();
+    loadHealth();
+  } catch (err) {
+    ctlNote(esc(err.message || err), "err");
+  }
+  button.disabled = false;
+};
+
+loadControllerConfig();
+
 el("fitRoad").onclick = fitRoadway;
 
 el("clearRoad").onclick = () => {
@@ -1687,7 +1809,7 @@ let lastController = null;
 const GUIDE = [
   {
     title: "Sensor streaming",
-    text: "The LiDAR must be sending frames before anything else. If this stays unticked, check the sensor's power and cable, and the Device panel.",
+    text: "The LiDAR must be sending frames before anything else. The unit finds the sensor on its own; if this stays unticked, the Device panel says what it is doing -- still searching, or why it could not connect. A sensor takes about a minute to boot.",
     done: () => !!(lastHealth && lastHealth.sensor.last_frame_age_s !== null && lastHealth.sensor.last_frame_age_s < 5),
   },
   {
@@ -1730,10 +1852,20 @@ const GUIDE = [
     actions: [["Save zones", () => saveZones()]],
   },
   {
-    title: "Check the controller",
-    text: "The controller link should show the adapter replying, the controller polling, and live signal channels in the sidebar.",
-    done: () => !!(lastHealth && lastHealth.controller && lastHealth.controller.signals_live &&
+    title: "Connect the controller",
+    text: "Choose the SDLC adapter in Controller connection: Find searches the cabinet network for the EM-HDLC, or type its address. Connect saves it on the unit and switches over at once.",
+    done: () => !!(lastHealth && lastHealth.controller && lastHealth.controller.kind !== "simulator" &&
                    lastHealth.controller.link_reply_age_s !== null && lastHealth.controller.link_reply_age_s < 10),
+    actions: [["Find adapter", () => {
+      el("ctlSection").scrollIntoView({ block: "center" });
+      el("ctlFind").click();
+    }]],
+  },
+  {
+    title: "Check the controller",
+    text: "The controller should be polling the detector BIU, and live signal channels should show in the sidebar. If the signals stay stale, set the EM-HDLC's forward address to this unit, port 10002, in its web page.",
+    done: () => !!(lastHealth && lastHealth.controller && lastHealth.controller.signals_live &&
+                   lastHealth.controller.controller_poll_age_s !== null && lastHealth.controller.controller_poll_age_s < 10),
   },
   {
     title: "Test a call",

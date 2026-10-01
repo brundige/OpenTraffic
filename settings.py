@@ -1,7 +1,7 @@
 import os
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, Optional, Set
 
 import yaml
 
@@ -9,6 +9,11 @@ import yaml
 PROFILES_PATH = Path(__file__).parent / "config" / "profiles.yaml"
 
 ENV_PREFIX = "OPENTRAFFIC_"
+
+# Settings that belong to the cabinet rather than the build: set from
+# the inspector and kept in the unit's site file (data/site.yaml), so
+# installing a unit needs no editing of files or environment.
+SITE_KEYS = ("controller", "controller_host")
 
 
 @dataclass
@@ -18,7 +23,11 @@ class Settings:
     """
 
     profile: str
+    # A sensor address, "auto" to find it on the network, or a recording.
     source: str
+    # Limit the "auto" search to one interface (the LiDAR port); empty
+    # searches every interface.
+    sensor_interface: str = ""
     lidar_port: int = 7502
     imu_port: int = 7503
     frame_timeout: float = 10.0
@@ -53,6 +62,10 @@ class Settings:
     background_file: Path = Path("data/background.npz")
     background_voxel: float = 0.2
     background_learn_seconds: float = 20.0
+    site_file: Path = Path("data/site.yaml")
+    # Which settings the environment or command line fixed, so the
+    # inspector can say it cannot change them.
+    pinned: Set[str] = field(default_factory=set)
 
     @property
     def source_is_recording(self) -> bool:
@@ -114,9 +127,9 @@ def load_settings(
     values = dict(profiles[name] or {})
 
     types = {
-        field.name: field.type
-        for field in fields(Settings)
-        if field.name != "profile"
+        item.name: item.type
+        for item in fields(Settings)
+        if item.name not in ("profile", "pinned")
     }
 
     unknown = set(values) - set(types)
@@ -127,16 +140,24 @@ def load_settings(
             f"{', '.join(sorted(unknown))}"
         )
 
+    site_file = Path(values.get("site_file") or Settings.site_file)
+
+    values.update(read_site(site_file))
+
+    pinned = set()
+
     for key in types:
 
         from_env = os.environ.get(ENV_PREFIX + key.upper())
 
         if from_env:
             values[key] = from_env
+            pinned.add(key)
 
-    values.update(
-        {key: value for key, value in overrides.items() if value is not None}
-    )
+    given = {key: value for key, value in overrides.items() if value is not None}
+
+    values.update(given)
+    pinned.update(given)
 
     if not values.get("source"):
         raise ValueError(
@@ -147,5 +168,50 @@ def load_settings(
 
     return Settings(
         profile=name,
+        pinned=pinned,
         **{key: _coerce(value, types[key]) for key, value in values.items()},
     )
+
+
+def read_site(path: Path) -> Dict[str, Any]:
+    """
+    The unit's site settings, or {} if none have been saved yet.
+    """
+
+    try:
+        document = yaml.safe_load(Path(path).read_text()) or {}
+    except FileNotFoundError:
+        return {}
+
+    if not isinstance(document, dict):
+        raise ValueError(f"{path} is not a mapping")
+
+    unknown = set(document) - set(SITE_KEYS)
+
+    if unknown:
+        raise ValueError(f"{path} has unknown settings: {', '.join(sorted(unknown))}")
+
+    return document
+
+
+def write_site(path: Path, updates: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Merge updates into the site file, atomically. Returns the result.
+    """
+
+    path = Path(path)
+
+    document = {**read_site(path), **{k: updates[k] for k in SITE_KEYS if k in updates}}
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    temporary = path.with_name(path.name + ".tmp")
+
+    temporary.write_text(
+        "# This unit's site settings, written by the inspector.\n"
+        + yaml.safe_dump(document, sort_keys=False)
+    )
+
+    os.replace(temporary, path)
+
+    return document
