@@ -357,7 +357,7 @@ them out, since they hold port 8080.
 
 ## Reaching a unit over the city VPN
 
-If your trying to test this on your mumnipal infrastructure, you need each unit's address on the city network. Ask your city IT for:
+If your trying to test this on your municipal infrastructure, you need each unit's address on the city network. Ask your city IT for:
 
 1. **A fixed address per unit** — a DHCP reservation for the Jetson's
    cabinet-network port, or a static IP. A **DNS name** per unit
