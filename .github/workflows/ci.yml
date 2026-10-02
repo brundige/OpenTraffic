@@ -1,0 +1,89 @@
+# Checks every push to main and every pull request. There are no unit
+# tests yet; this catches what can be caught without a sensor or a
+# controller: Python errors, modules that no longer import, shell
+# mistakes in the deploy scripts, and a Jetson image that will not build.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      # Real bugs only (syntax errors, undefined names, unused imports
+      # and variables), not style.
+      - name: ruff
+        run: |
+          pip install ruff
+          ruff check --select E9,F63,F7,F82,F401,F811,F841 --output-format github .
+
+      # shellcheck is preinstalled on GitHub's Ubuntu runners.
+      - name: shellcheck
+        run: shellcheck deploy/*.sh
+
+  imports:
+    name: Import every module
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # Same Python as docker/Dockerfile.
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Import
+        run: |
+          python - <<'EOF'
+          import importlib, pathlib, sys
+          sys.path.insert(0, ".")
+          failed = []
+          for p in sorted(pathlib.Path(".").rglob("*.py")):
+              if any(part.startswith(".") for part in p.parts) or p.stem == "__main__":
+                  continue
+              mod = ".".join(p.with_suffix("").parts).removesuffix(".__init__")
+              try:
+                  importlib.import_module(mod)
+              except Exception as e:
+                  failed.append(mod)
+                  print(f"::error file={p}::{mod} does not import: {type(e).__name__}: {e}")
+          print(f"{len(failed)} of the modules failed to import" if failed else "all modules import")
+          sys.exit(1 if failed else 0)
+          EOF
+
+  docker:
+    name: Build the Jetson image
+    # Native arm64, like the Jetson; no emulation.
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v5
+
+      - run: |
+          docker build -f docker/Dockerfile \
+            --build-arg VERSION=$(git describe --always --dirty) \
+            -t opentraffic-detector .
+
+      - name: Smoke test
+        run: docker run --rm opentraffic-detector python -c "import main, inspector.server, health"

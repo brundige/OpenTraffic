@@ -1,5 +1,7 @@
 # OpenTraffic
 
+[![CI](https://github.com/brundige/OpenTraffic/actions/workflows/ci.yml/badge.svg)](https://github.com/brundige/OpenTraffic/actions/workflows/ci.yml)
+
 LiDAR vehicle detection for signalised intersections. A pole-mounted
 Ouster OS-1 watches the approaches; a Jetson in the signal cabinet finds
 vehicles in operator-drawn zones and places detector calls on the traffic
