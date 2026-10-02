@@ -1,6 +1,7 @@
 # OpenTraffic
 
 [![CI](https://github.com/brundige/OpenTraffic/actions/workflows/ci.yml/badge.svg)](https://github.com/brundige/OpenTraffic/actions/workflows/ci.yml)
+[![Discord](https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/QGDazpAuNh)
 
 LiDAR vehicle detection for signalised intersections. A pole-mounted
 Ouster OS-1 watches the approaches; a Jetson in the signal cabinet finds
@@ -501,6 +502,9 @@ check of every module, shellcheck and a build of the Jetson image.
 Issues and pull requests are welcome; see
 [CONTRIBUTING.md](CONTRIBUTING.md). Report security problems privately,
 as described in [SECURITY.md](SECURITY.md).
+
+Questions, field results and adapter ideas: join the
+[OpenTraffic Discord](https://discord.gg/QGDazpAuNh).
 
 ## License
 
