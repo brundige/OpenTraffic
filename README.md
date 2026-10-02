@@ -4,7 +4,7 @@
 [![Discord](https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/QGDazpAuNh)
 
 Sensor-agnostic vehicle detection for signalised intersections. A
-sensor on the pole watches the approaches; a Jetson in the signal
+sensor on a pole watches the approaches; a Jetson in the signal
 cabinet finds vehicles in operator-drawn zones and places detector calls
 on the traffic controller over the cabinet's SDLC bus, through a Luxcom
 EM-HDLC. The same link reads the controller's signal state back.
@@ -238,7 +238,7 @@ over NTCIP (`vehicleDetectorStatusGroupActive`):
 | 33 | detectors 9–16 |
 | 34–35 | sent as 0 |
 
-All 16 bits and combinations read back exactly. **This is one
+**This is one
 controller's reading of the frame, not the TS2 text** — confirm against
 the spec or a real detector BIU before relying on it in the field.
 BIUs 2–4 (detectors 17–64) are refused until verified the same way.
@@ -293,7 +293,8 @@ The inspector's **Device** panel shows the same report.
 
 **Hardware.** Parts list and compute options (Orin NX 16GB in a wide-
 temperature fanless box): see the *OpenTraffic Cabinet Hardware Parts
-List* document.
+List* document. It's worth noting, that I am developing this on an Jetson - in production, a commercial edge compute device is probably the way ! Given that the impact of device failure is somewhat low, its probably worth seeing how long it takes a $250 unit to fail -- since the commerical units are in the 5k range.
+
 
 **Finding the sensor.** The prod profile has `source: auto`: the
 detector asks for `_ouster-lidar._tcp` over mDNS on every interface,
@@ -356,12 +357,11 @@ them out, since they hold port 8080.
 
 ## Reaching a unit over the city VPN
 
-Yes — you need each unit's address on the city network. Ask city IT for:
+If your trying to test this on your mumnipal infrastructure, you need each unit's address on the city network. Ask your city IT for:
 
 1. **A fixed address per unit** — a DHCP reservation for the Jetson's
    cabinet-network port, or a static IP. A **DNS name** per unit
-   (e.g. `ot-main-and-5th.signals.city.gov`) is better still: nobody has
-   to remember addresses, and a box swap does not change the name.
+   (e.g. `ot-main-and-5th.signals.city.gov`) is better still.
 2. **Firewall rules** allowing the VPN subnet to reach the units on TCP
    8080 (inspector), 8090 (health) and 22 (SSH, for maintenance) — and
    nothing from outside the city network.
@@ -374,7 +374,7 @@ confirm you are talking to the unit you think you are.
 
 **Two network ports on the Jetson.** One dedicated to the LiDAR
 (link-local, ~130 Mbit/s), one for the cabinet/city network (EM-HDLC,
-VPN access). Do not bridge them.
+VPN access). Do not bridge them. If you only have ethernet port on the jetson - I had success locally by connecting the SDLC, Lidar and Jetson to a "dumb" nwetwork switch. I used a Netgear GS3116PP which has the added advantage of POE.
 
 ---
 
