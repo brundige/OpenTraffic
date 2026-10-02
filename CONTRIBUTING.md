@@ -3,6 +3,9 @@
 Thanks for helping. OpenTraffic drives real traffic signals, so changes
 are judged first on whether they are safe and verifiable.
 
+## AI Disclosure
+This project uses anthropic model opus 4.5 to generate documentaion, perform tests, and to bootstrap high level architecture from business requirements. Functional implementation, code reviews, and code specific to the domain was not AI generated. 
+
 ## Reporting a problem
 
 Open an issue with:
