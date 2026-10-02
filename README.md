@@ -3,19 +3,26 @@
 [![CI](https://github.com/brundige/OpenTraffic/actions/workflows/ci.yml/badge.svg)](https://github.com/brundige/OpenTraffic/actions/workflows/ci.yml)
 [![Discord](https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/QGDazpAuNh)
 
-LiDAR vehicle detection for signalised intersections. A pole-mounted
-Ouster OS-1 watches the approaches; a Jetson in the signal cabinet finds
-vehicles in operator-drawn zones and places detector calls on the traffic
-controller over the cabinet's SDLC bus, through a Luxcom EM-HDLC. The
-same link reads the controller's signal state back.
+Sensor-agnostic vehicle detection for signalised intersections. A
+sensor on the pole watches the approaches; a Jetson in the signal
+cabinet finds vehicles in operator-drawn zones and places detector calls
+on the traffic controller over the cabinet's SDLC bus, through a Luxcom
+EM-HDLC. The same link reads the controller's signal state back.
 
-**Status.** Proven on a bench: OS-1-128, Luxcom EM-HDLC, Siemens M60
-(SEPAC 5.7.0.31). Calls placed by the detector were confirmed on the
-controller over NTCIP. Not yet deployed at an intersection; the Jetson
-deployment pieces (systemd on-demand inspector) are written but have not
-been run on a Jetson yet.
+**Sensors.** Everything after the sensor — background, roadway fit,
+zones, presence, calls and the inspector — works on frames of 3D points
+and does not know which sensor produced them. A sensor adapter in
+`sensors/` supplies those frames. The first adapter, written for bench
+testing, is for an Ouster OS-1 LiDAR, alongside clip replay for working
+without hardware. The goal of the project is to expand the codebase to
+work with any type of sensor — other LiDARs, radar, cameras and computer
+vision — and new adapters are very welcome.
 
-Deeper notes on the sensor, the roadway fit, zones and the rolling
+**Status.** Detector calls confirmed on a Siemens M60 (SEPAC 5.7.0.31)
+over NTCIP, through a Luxcom EM-HDLC, with the OS-1 adapter. Field
+testing at an intersection is next.
+
+Deeper notes on the OS-1 adapter, the roadway fit, zones and the rolling
 buffer are in [info.md](info.md).
 
 > **Safety.** OpenTraffic places calls on a live traffic signal
