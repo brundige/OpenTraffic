@@ -13,7 +13,7 @@ EM-HDLC. The same link reads the controller's signal state back.
 zones, presence, calls and the inspector — works on frames of 3D points
 and does not know which sensor produced them. A sensor adapter in
 `sensors/` supplies those frames. The first adapter, written for bench
-testing, is for an Ouster OS-1 LiDAR, alongside clip replay for working
+testing, is for an Ouster OS-1 LiDAR, alongside clip replay for developing
 without hardware. The goal of the project is to expand the codebase to
 work with any type of sensor — other LiDARs, radar, cameras and computer
 vision — and new adapters are very welcome.
