@@ -43,6 +43,9 @@ from .luxcom import CMD_DISCOVER, MAGIC, UI_CONTROL, command
 from .network import ArpListener
 
 
+# Evidence from the running link counts only if this fresh (s).
+RECENT_S = 10.0
+
 SKIP_INTERFACES = ("lo", "docker", "br-", "veth", "virbr", "l4tbr", "tailscale", "wg")
 
 
@@ -122,12 +125,15 @@ def find_adapters(
     def saw(address: str, how: str) -> None:
         found.setdefault(address, set()).add(how)
 
-    # What the running link has already heard.
+    # What the running link has heard lately -- not what it remembers
+    # from an adapter that has since gone quiet.
     if running:
-        if running.get("reply_from"):
+        now = time.time()
+        if running.get("reply_from") and now - (running.get("last_reply") or 0) < RECENT_S:
             saw(running["reply_from"], "answering this unit's link")
         for frame in running.get("forwarded_recent") or []:
-            saw(frame["from"], "forwarding SDLC frames to this unit")
+            if now - frame["time"] < RECENT_S:
+                saw(frame["from"], "forwarding SDLC frames to this unit")
 
     # Ask on the command port, or from any port if the link holds it.
     asker = _bind(listen_port)

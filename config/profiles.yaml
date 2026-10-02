@@ -60,6 +60,7 @@ profiles:
     # The bench EM-HDLC is at 192.168.1.124 and forwards to
     # 192.168.1.139, so this Mac needs that address on the wired port:
     #   sudo ifconfig en0 alias 192.168.1.139 255.255.255.0
+    # (A Jetson takes it itself: inspector, Find, Use it. See README.)
     controller: luxcom
     controller_host: 192.168.1.124
     controller_port: 10001

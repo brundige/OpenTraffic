@@ -64,7 +64,9 @@ class FrameStats:
     def snapshot(self) -> Dict[str, Any]:
         now = time.monotonic()
         with self._lock:
-            window = list(self._window)
+            # Only frames from the last 5 s: the window is trimmed as
+            # frames arrive, so with none arriving it would go stale.
+            window = [t for t in self._window if t >= now - 5.0]
             age = now - self.last_frame if self.last_frame is not None else None
             return {
                 "frames": self.frames,

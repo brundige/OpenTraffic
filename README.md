@@ -127,6 +127,16 @@ sudo ifconfig en0 alias 192.168.1.139 255.255.255.0   # EM-HDLC 192.168.1.124 fo
 sudo ifconfig en0 alias 10.227.3.139 255.255.0.0      # M60 at 10.227.3.77 (NTCIP)
 ```
 
+**Bench with a Jetson instead.** Nothing to alias. On the bench the
+OS-1 and the EM-HDLC share the LiDAR port through a switch; open the
+inspector, **Controller connection → Find**, and the EM-HDLC shows as
+*set to send to 192.168.1.139, which no device has*. **Use it** and the
+unit takes 192.168.1.139 itself (kept in `data/site.yaml`, re-added at
+every start). Do not add that address to the port's NetworkManager
+profile as well: then two things own it, and choosing the simulator
+cannot give it back. Unplug the Mac or drop its alias first — two
+machines answering as .139 would fight over the adapter's traffic.
+
 ---
 
 ## Setting up an intersection

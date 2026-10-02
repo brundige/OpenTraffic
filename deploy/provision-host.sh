@@ -24,6 +24,10 @@
 #
 # The cabinet/city port is left alone: DHCP by default, or set it as
 # city IT asks (nmcli). Use a different subnet from the LiDAR port.
+#
+# Do not add the SDLC adapter's command/forward IP here: the inspector's
+# Find -> Use it has the detector take that address itself, and give it
+# back if the controller is changed.
 set -eu
 
 [ "$(id -u)" = 0 ] || { echo "run with sudo" >&2; exit 1; }
