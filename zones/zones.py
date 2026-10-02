@@ -82,7 +82,10 @@ class Zone:
 
         polygon = raw.get("polygon") or []
 
-        if not isinstance(polygon, list) or len(polygon) < 3:
+        if not isinstance(polygon, list):
+            raise ZoneError(f"{where} needs at least 3 points, got {polygon!r}")
+
+        if len(polygon) < 3:
             raise ZoneError(
                 f"{where} needs at least 3 points, got {len(polygon)}"
             )

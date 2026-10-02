@@ -40,8 +40,9 @@ buffer are in [info.md](info.md).
 11. [Configuration reference](#configuration-reference)
 12. [Troubleshooting](#troubleshooting)
 13. [Repository layout](#repository-layout)
-14. [Contributing](#contributing)
-15. [License](#license)
+14. [Testing](#testing)
+15. [Contributing](#contributing)
+16. [License](#license)
 
 ---
 
@@ -474,7 +475,24 @@ config/profiles.yaml dev and prod settings
 deploy/              provision-host.sh (root, once), install.sh, user units
 docker/, docker-compose.yml   Jetson image and services
 data/                per-unit state (git-ignored)
+tests/               unit tests (pytest)
 ```
+
+---
+
+## Testing
+
+Unit tests cover zone validation and storage and the presence logic
+(thresholds, call delay, exclusions, live zone reloads). They need no
+sensor or controller:
+
+```sh
+pip install -r requirements-dev.txt
+pytest
+```
+
+CI runs them on every push and pull request, alongside lint, an import
+check of every module, shellcheck and a build of the Jetson image.
 
 ---
 
