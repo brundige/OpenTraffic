@@ -359,10 +359,10 @@
     <p class="sub">An adapter is one class: it yields frames of 3D points in metres. Background learning, the roadway fit, zones, presence, calls and the setup page all work on those points, unchanged.</p>
     <div class="tabs">
       <div>
-<pre><code>from sensors.base import Lidar
+<pre><code>from sensors.base import Lidar as Sensor  <span class="c"># base class for every sensor</span>
 from sensors.types import PointCloudFrame
 
-class MyRadar(Lidar):
+class MyRadar(Sensor):
     <span class="c">"""Any sensor that can see the road."""</span>
 
     def frames(self):
