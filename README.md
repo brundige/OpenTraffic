@@ -15,6 +15,12 @@ been run on a Jetson yet.
 Deeper notes on the sensor, the roadway fit, zones and the rolling
 buffer are in [info.md](info.md).
 
+> **Safety.** OpenTraffic places calls on a live traffic signal
+> controller. It is provided without warranty (see [License](#license)).
+> Test on a bench first, keep the cabinet's existing detection as a
+> fallback, and deploy only with the agreement of the agency that owns
+> the signal.
+
 ---
 
 ## Contents
@@ -32,6 +38,8 @@ buffer are in [info.md](info.md).
 11. [Configuration reference](#configuration-reference)
 12. [Troubleshooting](#troubleshooting)
 13. [Repository layout](#repository-layout)
+14. [Contributing](#contributing)
+15. [License](#license)
 
 ---
 
@@ -465,3 +473,21 @@ deploy/              provision-host.sh (root, once), install.sh, user units
 docker/, docker-compose.yml   Jetson image and services
 data/                per-unit state (git-ignored)
 ```
+
+---
+
+## Contributing
+
+Issues and pull requests are welcome; see
+[CONTRIBUTING.md](CONTRIBUTING.md). Report security problems privately,
+as described in [SECURITY.md](SECURITY.md).
+
+## License
+
+Copyright (C) 2026 Chris Brundige.
+
+OpenTraffic is free software: you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the
+Free Software Foundation, either version 3 of the License, or (at your
+option) any later version. It is distributed WITHOUT ANY WARRANTY; see
+[LICENSE](LICENSE) for the full terms.
