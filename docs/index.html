@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>OpenTraffic — open-source LiDAR detection for traffic signals</title>
-<meta name="description" content="OpenTraffic turns a pole-mounted Ouster LiDAR and a Jetson into vehicle detection for signalised intersections, placing detector calls on the controller over the cabinet's SDLC bus. GPL-3.0.">
+<title>OpenTraffic — open-source, sensor-agnostic detection for traffic signals</title>
+<meta name="description" content="OpenTraffic is open-source, sensor-agnostic vehicle detection for signalised intersections. Any sensor that sees the road — LiDAR, radar, cameras — places detector calls on the controller over the cabinet's SDLC bus. GPL-3.0.">
 <meta property="og:title" content="OpenTraffic">
-<meta property="og:description" content="Open-source LiDAR vehicle detection for signalised intersections. Ouster OS-1 + Jetson + SDLC calls to the controller.">
+<meta property="og:description" content="Open-source, sensor-agnostic vehicle detection for signalised intersections. Bring any sensor; OpenTraffic places the calls.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://brundige.github.io/OpenTraffic/">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='9' y='2' width='14' height='28' rx='4' fill='%23222'/%3E%3Ccircle cx='16' cy='9' r='3.5' fill='%23e5484d'/%3E%3Ccircle cx='16' cy='16' r='3.5' fill='%23f5a524'/%3E%3Ccircle cx='16' cy='23' r='3.5' fill='%2330a46c'/%3E%3C/svg%3E">
@@ -204,6 +204,7 @@
     <a class="brand" href="#"><span class="lamp"><i></i><i></i><i></i></span>OpenTraffic</a>
     <div class="links">
       <a class="opt" href="#how">How it works</a>
+      <a class="opt" href="#adapters">Adapters</a>
       <a class="opt" href="#status">Status</a>
       <a class="opt" href="#start">Get started</a>
       <a href="https://github.com/brundige/OpenTraffic">GitHub</a>
@@ -214,11 +215,12 @@
 <header class="hero">
   <div class="wrap">
     <div>
-      <span class="eyebrow"><span class="dot"></span>Open source · GPL-3.0 · bench-proven</span>
-      <h1>LiDAR detection for <em>traffic signals</em>, in the open.</h1>
+      <span class="eyebrow"><span class="dot"></span>Open source · GPL-3.0 · sensor-agnostic</span>
+      <h1>Vehicle detection for <em>traffic signals</em>, from any sensor.</h1>
       <p class="lede">
-        OpenTraffic turns a pole-mounted Ouster LiDAR and an NVIDIA Jetson in the
-        signal cabinet into vehicle detection. Draw zones on the road; it places
+        OpenTraffic turns a sensor on the pole and an NVIDIA Jetson in the signal
+        cabinet into vehicle detection. LiDAR today; radar, other LiDARs and
+        cameras through open adapters. Draw zones on the road and it places
         detector calls on the controller over the cabinet's SDLC bus — no
         proprietary detection box required.
       </p>
@@ -227,11 +229,11 @@
           <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
           View on GitHub
         </a>
-        <a class="btn" href="#start">Get started</a>
+        <a class="btn" href="#adapters">Write an adapter</a>
       </div>
     </div>
 
-    <figure class="scene" aria-label="Illustration: the LiDAR sees a car enter a detection zone; after three seconds the zone places a call">
+    <figure class="scene" aria-label="Illustration: the sensor sees a car enter a detection zone; after three seconds the zone places a call">
       <svg viewBox="0 0 440 280" role="img">
         <rect class="road" x="0" y="120" width="440" height="110" rx="4"/>
         <line class="lane" x1="0" y1="175" x2="440" y2="175"/>
@@ -251,7 +253,7 @@
           <g class="sweep"><path d="M40 40 L118 40 A78 78 0 0 0 95 -15 Z" fill="var(--accent)" opacity=".08"/></g>
           <circle cx="40" cy="40" r="10" fill="var(--text)"/>
           <circle cx="40" cy="40" r="4" fill="var(--accent)"/>
-          <text class="lbl" x="56" y="30">OS-1</text>
+          <text class="lbl" x="56" y="30">sensor</text>
         </g>
         <!-- car as moving returns -->
         <g class="car">
@@ -268,7 +270,7 @@
           <text x="378" y="197" text-anchor="middle" style="font:700 12px Inter,sans-serif; fill:var(--accent-ink)">CALL ch 1</text>
         </g>
       </svg>
-      <figcaption class="cap"><span>moving returns in a zone</span><span>→ SDLC detector call</span></figcaption>
+      <figcaption class="cap"><span>moving points in a zone</span><span>→ SDLC detector call</span></figcaption>
     </figure>
   </div>
 </header>
@@ -279,6 +281,11 @@
     <p class="sub">The detector is the part that must never stop. Everything else — the web page,
       the setup guide — runs only while someone is looking.</p>
     <div class="grid">
+      <div class="card">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/><circle cx="12" cy="12" r="4"/></svg></div>
+        <h3>Sensor-agnostic</h3>
+        <p>Zones, presence and calls work on 3D points, not on any one product. Bring LiDAR, radar or cameras through a small adapter.</p>
+      </div>
       <div class="card">
         <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg></div>
         <h3>Calls on the real controller</h3>
@@ -304,10 +311,6 @@
         <h3>Health you can monitor</h3>
         <p>An open <code>/healthz</code> for uptime checks, and a token-protected <code>/health</code> report with sensor, background and link detail.</p>
       </div>
-      <div class="card">
-        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h10M4 17h7"/><circle cx="18" cy="16" r="3"/></svg></div>
-        <h3>Guided setup</h3>
-        <p>A step-by-step guide finds the sensor and the adapter on the network, learns the background and tests a call, ticking each step off live.</p>
       </div>
     </div>
   </div>
@@ -316,9 +319,9 @@
 <section id="how">
   <div class="wrap">
     <h2>How it works</h2>
-    <p class="sub">A fixed sensor sees the same static scene every frame. Anything that isn't part of it, inside a zone, for long enough, is a vehicle waiting for green.</p>
+    <p class="sub">A fixed sensor sees the same static scene every frame. Anything that isn't part of it, inside a zone, for long enough, is a vehicle waiting for green — whatever the sensor.</p>
     <div class="pipe">
-      <div class="stage"><h4>Ingest</h4><p>OS-1 point clouds over UDP, straight to the Jetson.</p></div>
+      <div class="stage"><h4>Ingest</h4><p>A sensor adapter delivers frames of 3D points. The rest of the pipeline never knows which sensor made them.</p></div>
       <div class="stage"><h4>Background</h4><p>20 s learn of the empty scene in 0.2 m voxels. Deliberately never adapts — a waiting car must not fade away.</p></div>
       <div class="stage"><h4>Zones</h4><p>Moving points inside a zone, above the roadway, outside every exclusion.</p></div>
       <div class="stage"><h4>Presence</h4><p>Enough points for 3 s without a break makes the zone present.</p></div>
@@ -327,16 +330,54 @@
   </div>
 </section>
 
+<section id="adapters">
+  <div class="wrap">
+    <h2>Bring your own sensor</h2>
+    <p class="sub">An adapter is one class: it yields frames of 3D points in metres. Background learning, the roadway fit, zones, presence, calls and the setup page all work on those points, unchanged.</p>
+    <div class="tabs">
+      <div>
+<pre><code>from sensors.base import Lidar
+from sensors.types import PointCloudFrame
+
+class MyRadar(Lidar):
+    <span class="c">"""Any sensor that can see the road."""</span>
+
+    def frames(self):
+        for scan in self.device.stream():
+            yield PointCloudFrame(
+                xyz=scan.points,        <span class="c"># (N, 3) metres</span>
+                timestamp=scan.time,
+                sensor_name="my-radar",
+            )
+
+    def close(self):
+        self.device.disconnect()</code></pre>
+      </div>
+      <div class="grid" style="grid-template-columns:1fr 1fr; align-content:start">
+        <div class="card"><span class="tick ok" style="display:inline-grid">✓</span><h3>LiDAR</h3><p>Shipped, plus clip replay for development without hardware.</p></div>
+        <div class="card"><span class="tick todo" style="display:inline-grid">+</span><h3>Other LiDARs</h3><p>Any spinning or solid-state unit with an SDK that returns points.</p></div>
+        <div class="card"><span class="tick todo" style="display:inline-grid">+</span><h3>Radar</h3><p>4D imaging radars already emit point clouds with height.</p></div>
+        <div class="card"><span class="tick todo" style="display:inline-grid">+</span><h3>Camera / CV</h3><p>Stereo or depth cameras, or detections projected onto the roadway.</p></div>
+      </div>
+    </div>
+    <div class="cta" style="margin-top:28px">
+      <a class="btn primary" href="https://github.com/brundige/OpenTraffic/tree/main/sensors">Browse the sensor adapters</a>
+      <a class="btn" href="https://github.com/brundige/OpenTraffic/issues/new?title=Sensor%20adapter%3A%20">Propose an adapter</a>
+    </div>
+  </div>
+</section>
+
 <section id="status">
   <div class="wrap">
-    <h2>Where it stands</h2>
-    <p class="sub">Honest status: proven on a bench, not yet at an intersection. That's the next milestone — and where help is most welcome.</p>
+    <h2>Roadmap</h2>
+    <p class="sub">The core works end to end — detection to a live call on the controller. Next comes the field, and more sensors.</p>
     <div class="status">
       <div class="card">
         <h3 style="margin-top:0">Working</h3>
         <ul class="list">
           <li><span class="tick ok">✓</span><span>Calls placed by the detector confirmed on a Siemens M60 over NTCIP</span></li>
           <li><span class="tick ok">✓</span><span>Signal state read back over the SDLC link</span></li>
+          <li><span class="tick ok">✓</span><span>Sensor-agnostic pipeline: adapters yield 3D points, everything downstream is shared</span></li>
           <li><span class="tick ok">✓</span><span>Automatic discovery of the sensor and the EM-HDLC adapter</span></li>
           <li><span class="tick ok">✓</span><span>CI: unit tests, lint, and an arm64 Jetson image build on every push</span></li>
         </ul>
@@ -344,14 +385,14 @@
       <div class="card">
         <h3 style="margin-top:0">Next</h3>
         <ul class="list">
-          <li><span class="tick todo">→</span><span>First run on a Jetson in a real cabinet</span></li>
-          <li><span class="tick todo">→</span><span>First intersection deployment, alongside existing detection</span></li>
-          <li><span class="tick todo">→</span><span>More controllers and adapters</span></li>
+          <li><span class="tick todo">→</span><span>Field trials at live intersections</span></li>
+          <li><span class="tick todo">→</span><span>Sensor adapters from the community: radar, other LiDARs, camera / CV</span></li>
+          <li><span class="tick todo">→</span><span>More controllers and controller links</span></li>
           <li><span class="tick todo">→</span><span>Broader test coverage of the controller link</span></li>
         </ul>
       </div>
     </div>
-    <p class="hw" style="margin-top:20px">Bench hardware: Ouster OS-1-128 · NVIDIA Jetson · Luxcom EM-HDLC · Siemens M60 (SEPAC 5.7)</p>
+    <p class="hw" style="margin-top:20px">Reference cabinet: NVIDIA Jetson · Luxcom EM-HDLC · Siemens M60 (SEPAC 5.7)</p>
   </div>
 </section>
 
@@ -398,7 +439,7 @@ git pull &amp;&amp; deploy/install.sh</code></pre>
 <section id="community" class="community">
   <div class="wrap">
     <h2>Build it with us</h2>
-    <p class="sub">Traffic engineers, signal technicians, LiDAR and embedded folks — bug reports, bench results and pull requests are all welcome.</p>
+    <p class="sub">Traffic engineers, signal technicians, LiDAR, radar, computer-vision and embedded folks — new sensor adapters, field results, bug reports and pull requests are all welcome.</p>
     <div class="cta">
       <a class="btn primary" href="https://github.com/brundige/OpenTraffic/blob/main/CONTRIBUTING.md">Contributing guide</a>
       <a class="btn" href="https://github.com/brundige/OpenTraffic/issues">Open an issue</a>
