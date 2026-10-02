@@ -522,3 +522,7 @@ under the terms of the GNU General Public License as published by the
 Free Software Foundation, either version 3 of the License, or (at your
 option) any later version. It is distributed WITHOUT ANY WARRANTY; see
 [LICENSE](LICENSE) for the full terms.
+
+Ouster, Siemens, Luxcom, NVIDIA, Jetson and other product names are
+trademarks of their respective owners. OpenTraffic is an independent
+project, not affiliated with or endorsed by them.
